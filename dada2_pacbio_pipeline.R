@@ -5,30 +5,38 @@
 #' to generate ASV tables while optionally tracking read IDs from input to output.
 #' 
 #' Supports multiple amplicon types:
-#' - V3V4: ~450bp 16S subregion
-#' - FL-16S: Full-length 16S (~1.5kb)
+#' - V3V4: ~450bp 16S V3-V4 region
+#' - V1V9: Full-length 16S (~1.5kb) using 27F/1492R variants
+#' - FL-16S: Full-length 16S (alias for V1V9)
 #' - Titan: 16S+ITS+300bp 23S (~2-2.5kb)
-#' - full-operon: 27F-2428R (~4-5kb)
+#' - full-operon: 27F-2428R (~4.5kb)
+#' 
+#' MaxEE (Maximum Expected Errors) filtering:
+#' - Based on quality scores, not a simple threshold
+#' - Default values scale with amplicon length
+#' - For high-quality HiFi (Q30+): use 1-3
+#' - For standard HiFi: use 2-5
+#' - Override with --maxEE parameter
 #' 
 #' Usage examples:
 #' # Basic usage with directory of FASTQ files
-#' Rscript dada2_pacbio_pipeline.R -i /path/to/fastq/ -o results -a FL-16S -t 8
+#' Rscript dada2_pacbio_pipeline.R -i /path/to/fastq/ -o results -a V1V9 -t 8
 #' 
 #' # With specific files and taxonomy
-#' Rscript dada2_pacbio_pipeline.R -i sample1.fq.gz,sample2.fq.gz -o results -a FL-16S --taxonomy silva.fa.gz
+#' Rscript dada2_pacbio_pipeline.R -i sample1.fq.gz,sample2.fq.gz -o results -a V3V4 --taxonomy silva.fa.gz
 #' 
 #' # Custom parameters for non-standard amplicons
-#' Rscript dada2_pacbio_pipeline.R -i reads/ -o results -a FL-16S --minLen 1000 --maxLen 2000 --maxEE 5
+#' Rscript dada2_pacbio_pipeline.R -i reads/ -o results -a Titan --minLen 1800 --maxLen 2700 --maxEE 3
 #' 
 #' # Skip primer removal if already done
-#' Rscript dada2_pacbio_pipeline.R -i trimmed_reads/ -o results -a Titan --skip-primers
+#' Rscript dada2_pacbio_pipeline.R -i trimmed_reads/ -o results -a full-operon --skip-primers
 #' 
 #' Requirements:
 #' - R packages: dada2, ShortRead, Biostrings, data.table, optparse
 #' - External tools: cutadapt (for primer removal)
 #' 
 #' Author: Assistant
-#' Version: 1.0
+#' Version: 1.1
 
 # Parse command line arguments
 library(optparse)
@@ -38,8 +46,8 @@ option_list <- list(
               help="Input FASTQ files (comma-separated list or directory path)", metavar="character"),
   make_option(c("-o", "--output"), type="character", default="dada2_output",
               help="Output directory [default: %default]", metavar="character"),
-  make_option(c("-a", "--amplicon"), type="character", default="FL-16S",
-              help="Amplicon type: V3V4, FL-16S, Titan, full-operon [default: %default]", metavar="character"),
+  make_option(c("-a", "--amplicon"), type="character", default="V1V9",
+              help="Amplicon type: V3V4, V1V9, FL-16S, Titan, full-operon [default: %default]", metavar="character"),
   make_option(c("-t", "--threads"), type="integer", default=4,
               help="Number of threads [default: %default]", metavar="integer"),
   make_option(c("-p", "--pool"), type="character", default="pseudo",
@@ -83,41 +91,53 @@ suppressPackageStartupMessages({
 })
 
 # Configuration for different amplicon types
+# Note: maxEE values are suggestions - adjust based on your HiFi quality
+# For Q30+ HiFi reads, you can use stricter values (1-3)
+# For longer amplicons or lower quality, use more permissive values (3-6)
 AMPLICON_CONFIGS <- list(
   "V3V4" = list(
     minLen = 400,
     maxLen = 600,
-    maxEE = 2,
+    maxEE = 2,  # ~450bp amplicon
     primers = list(
-      forward = "CCTACGGGNGGCWGCAG",  # 341F
-      reverse = "GACTACHVGGGTATCTAATCC"  # 805R
+      forward = "CCTACGGGNGGCNGCAG",      # 341F with N
+      reverse = "GACTACNNGGGTATCTAATCC"   # 805R with NN
+    )
+  ),
+  "V1V9" = list(
+    minLen = 1400,
+    maxLen = 1600,
+    maxEE = 3,  # Full-length 16S
+    primers = list(
+      forward = "AGRGTTYGATYMTGGCTCAG",   # 27F variant
+      reverse = "RGYTACCTTGTTACGACTT"     # 1492R variant
     )
   ),
   "FL-16S" = list(
     minLen = 1400,
     maxLen = 1600,
-    maxEE = 3,
+    maxEE = 3,  # Full-length 16S (same as V1V9)
     primers = list(
-      forward = "AGAGTTTGATCMTGGCTCAG",  # 27F
-      reverse = "AAGGAGGTGATCCAGCCGCA"   # 1492R
+      forward = "AGRGTTYGATYMTGGCTCAG",   # Using V1V9 primers
+      reverse = "RGYTACCTTGTTACGACTT"     # Using V1V9 primers
     )
   ),
   "Titan" = list(
     minLen = 2000,
     maxLen = 2500,
-    maxEE = 4,
+    maxEE = 4,  # 16S+ITS+23S
     primers = list(
-      forward = "AGAGTTTGATCMTGGCTCAG",  # 27F
-      reverse = "CUSTOM_23S_PRIMER"       # Replace with actual
+      forward = "AGRRTTYGATYHTDGYTYAG",   # Titan forward
+      reverse = "YCNTTCCYTYDYRGTACT"      # Titan reverse
     )
   ),
   "full-operon" = list(
     minLen = 4000,
     maxLen = 5000,
-    maxEE = 5,
+    maxEE = 5,  # ~4.5kb amplicon
     primers = list(
-      forward = "AGAGTTTGATCMTGGCTCAG",  # 27F
-      reverse = "GCGTGTGTACAAGGCCCGGGAACG"  # 2428R
+      forward = "AGRGTTTGATYHTGGCTCAG",   # 27F variant
+      reverse = "CCRAMCTGTCTCACGACG"      # 2428R
     )
   )
 )
