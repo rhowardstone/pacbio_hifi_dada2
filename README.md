@@ -68,10 +68,11 @@ Rscript dada2_pacbio_pipeline.R -i input_directory -o output_directory -a amplic
 
 | Amplicon | Length range | MaxEE | Forward primer | Reverse primer |
 |----------|--------------|-------|----------------|----------------|
-| V3V4 | 400-600 bp | 2 | CCTACGGGNGGCWGCAG | GACTACHVGGGTATCTAATCC |
-| FL-16S | 1400-1600 bp | 3 | AGAGTTTGATCMTGGCTCAG | AAGGAGGTGATCCAGCCGCA |
-| Titan | 2000-2500 bp | 4 | AGAGTTTGATCMTGGCTCAG | Custom 23S primer |
-| full-operon | 4000-5000 bp | 5 | AGAGTTTGATCMTGGCTCAG | GCGTGTGTACAAGGCCCGGGAACG |
+| V3V4 | 400-600 bp | 2 | CCTACGGGNGGCNGCAG | GACTACNNGGGTATCTAATCC |
+| V1V9 | 1400-1600 bp | 3 | AGRGTTYGATYMTGGCTCAG | RGYTACCTTGTTACGACTT |
+| FL-16S | 1400-1600 bp | 3 | AGRGTTYGATYMTGGCTCAG | RGYTACCTTGTTACGACTT |
+| Titan | 2000-2500 bp | 4 | AGRRTTYGATYHTDGYTYAG | YCNTTCCYTYDYRGTACT |
+| full-operon | 4000-5000 bp | 5 | AGRGTTTGATYHTGGCTCAG | CCRAMCTGTCTCACGACG |
 
 ## Output files
 
